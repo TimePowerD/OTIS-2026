@@ -13,6 +13,18 @@
 #include <string>
 #include <vector>
 
+#include "plot_config.h"
+
+class PlotWriteError final : public std::runtime_error {
+public:
+    using std::runtime_error::runtime_error;
+};
+
+class InputEndedError final : public std::runtime_error {
+public:
+    using std::runtime_error::runtime_error;
+};
+
 // InputSignal supplies u[tau] for any simulation step.
 class InputSignal {
 public:
@@ -142,7 +154,7 @@ std::vector<SimulationRow> simulate(const Model& model,
     }
 
     std::vector<double> inputHistory;
-    std::vector<double> outputHistory{initialOutput};
+    std::vector outputHistory{initialOutput};
     std::vector<SimulationRow> rows;
     inputHistory.reserve(numberOfSteps);
     outputHistory.reserve(numberOfSteps + 1);
@@ -189,9 +201,10 @@ std::filesystem::path writeSvgPlot(const std::vector<SimulationRow>& rows) {
         outputs.push_back(row.nextOutput);
     }
 
-    const auto limits = std::minmax_element(outputs.begin(), outputs.end());
-    double minimum = *limits.first;
-    double maximum = *limits.second;
+    const auto [minimumIterator, maximumIterator] =
+        std::minmax_element(outputs.begin(), outputs.end());
+    double minimum = *minimumIterator;
+    double maximum = *maximumIterator;
     double padding = (maximum - minimum) * 0.1;
     if (padding == 0.0) {
         padding = std::max(1.0, std::abs(maximum) * 0.1);
@@ -203,7 +216,7 @@ std::filesystem::path writeSvgPlot(const std::vector<SimulationRow>& rows) {
     constexpr double top = 56.0;
     constexpr double plotWidth = 700.0;
     constexpr double plotHeight = 390.0;
-    const double finalStep = static_cast<double>(rows.size());
+    const auto finalStep = static_cast<double>(rows.size());
     const auto xCoordinate = [=](std::size_t step) {
         return left + static_cast<double>(step) / finalStep * plotWidth;
     };
@@ -212,12 +225,12 @@ std::filesystem::path writeSvgPlot(const std::vector<SimulationRow>& rows) {
     };
 
     const auto timestamp = std::chrono::steady_clock::now().time_since_epoch().count();
-    const std::filesystem::path outputPath =
-        std::filesystem::temp_directory_path() /
+    const auto outputPath =
+        std::filesystem::path(II03008_PLOT_DIRECTORY) /
         ("ii03008_task01_plot_" + std::to_string(timestamp) + ".svg");
     std::ofstream svg(outputPath);
     if (!svg) {
-        throw std::runtime_error("Could not create the SVG plot in the temporary directory.");
+        throw PlotWriteError("Could not create the SVG plot in the build directory.");
     }
 
     svg << std::fixed << std::setprecision(2);
@@ -232,7 +245,7 @@ std::filesystem::path writeSvgPlot(const std::vector<SimulationRow>& rows) {
         svg << "<line x1=\"" << left << "\" y1=\"" << y << "\" x2=\"" << left + plotWidth
             << "\" y2=\"" << y << "\" stroke=\"#d9dee7\"/>\n";
         svg << "<text x=\"" << left - 10.0 << "\" y=\"" << y + 5.0
-            << "\" text-anchor=\"end\" font-family=\"sans-serif\" font-size=\"12\">"
+            << R"(" text-anchor="end" font-family="sans-serif" font-size="12">)"
             << value << "</text>\n";
     }
 
@@ -256,13 +269,13 @@ std::filesystem::path writeSvgPlot(const std::vector<SimulationRow>& rows) {
         if (step % std::max<std::size_t>(1, rows.size() / 4) == 0 || step == rows.size()) {
             svg << "<text x=\"" << xCoordinate(step) << "\" y=\""
                 << top + plotHeight + 20.0
-                << "\" text-anchor=\"middle\" font-family=\"sans-serif\" font-size=\"12\">"
+                << R"(" text-anchor="middle" font-family="sans-serif" font-size="12">)"
                 << step << "</text>\n";
         }
     }
     svg << "</svg>\n";
     if (!svg) {
-        throw std::runtime_error("Failed while writing the SVG plot.");
+        throw PlotWriteError("Failed while writing the SVG plot.");
     }
     return outputPath;
 }
@@ -275,7 +288,7 @@ long long readInteger(const std::string& prompt) {
             return value;
         }
         if (std::cin.eof()) {
-            throw std::runtime_error("Input ended before all values were entered.");
+            throw InputEndedError("Input ended before all values were entered.");
         }
         std::cin.clear();
         std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
@@ -285,8 +298,7 @@ long long readInteger(const std::string& prompt) {
 
 long long readChoice(const std::string& prompt, long long minimum, long long maximum) {
     while (true) {
-        const long long value = readInteger(prompt);
-        if (value >= minimum && value <= maximum) {
+        if (const auto value = readInteger(prompt); value >= minimum && value <= maximum) {
             return value;
         }
         std::cout << "Choose a number from " << minimum << " to " << maximum << ".\n";
@@ -295,8 +307,7 @@ long long readChoice(const std::string& prompt, long long minimum, long long max
 
 std::size_t readPositiveSize(const std::string& prompt) {
     while (true) {
-        const long long value = readInteger(prompt);
-        if (value > 0) {
+        if (const auto value = readInteger(prompt); value > 0) {
             return static_cast<std::size_t>(value);
         }
         std::cout << "The value must be a positive integer.\n";
@@ -316,7 +327,7 @@ double readFiniteDouble(const std::string& prompt) {
             continue;
         }
         if (std::cin.eof()) {
-            throw std::runtime_error("Input ended before all values were entered.");
+            throw InputEndedError("Input ended before all values were entered.");
         }
         std::cin.clear();
         std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
@@ -326,8 +337,7 @@ double readFiniteDouble(const std::string& prompt) {
 
 double readNonNegativeDouble(const std::string& prompt) {
     while (true) {
-        const double value = readFiniteDouble(prompt);
-        if (value >= 0.0) {
+        if (const auto value = readFiniteDouble(prompt); value >= 0.0) {
             return value;
         }
         std::cout << "The value must be non-negative.\n";
@@ -336,8 +346,7 @@ double readNonNegativeDouble(const std::string& prompt) {
 
 double readPositiveDouble(const std::string& prompt) {
     while (true) {
-        const double value = readFiniteDouble(prompt);
-        if (value > 0.0) {
+        if (const auto value = readFiniteDouble(prompt); value > 0.0) {
             return value;
         }
         std::cout << "The value must be positive.\n";
