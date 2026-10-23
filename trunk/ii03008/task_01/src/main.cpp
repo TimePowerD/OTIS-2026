@@ -13,6 +13,12 @@
 #include <string>
 #include <vector>
 
+#ifdef _WIN32
+#define NOMINMAX
+#include <windows.h>
+#include <shellapi.h>
+#endif
+
 #include "plot_config.h"
 
 class PlotWriteError final : public std::runtime_error {
@@ -166,7 +172,7 @@ std::vector<SimulationRow> simulate(const Model& model,
 
         const double currentOutput = outputHistory.at(tau);
         const double nextOutput = model.nextValue(tau, outputHistory, inputHistory);
-        rows.push_back({tau, input, currentOutput, nextOutput});
+        rows.push_back({tau + 1, input, currentOutput, nextOutput});
         outputHistory.push_back(nextOutput);
     }
 
@@ -175,10 +181,10 @@ std::vector<SimulationRow> simulate(const Model& model,
 
 void printTable(const std::vector<SimulationRow>& rows) {
     std::cout << std::fixed << std::setprecision(6);
-    std::cout << std::setw(8) << "tau"
-              << std::setw(16) << "u_tau"
-              << std::setw(16) << "y_tau"
-              << std::setw(16) << "y_tau+1" << '\n';
+    std::cout << std::setw(8) << "Step"
+              << std::setw(16) << "Input u"
+              << std::setw(16) << "Before y"
+              << std::setw(16) << "After y" << '\n';
     std::cout << std::string(56, '-') << '\n';
 
     for (const SimulationRow& row : rows) {
@@ -195,8 +201,7 @@ std::filesystem::path writeSvgPlot(const std::vector<SimulationRow>& rows) {
     }
 
     std::vector<double> outputs;
-    outputs.reserve(rows.size() + 1);
-    outputs.push_back(rows.front().currentOutput);
+    outputs.reserve(rows.size());
     for (const SimulationRow& row : rows) {
         outputs.push_back(row.nextOutput);
     }
@@ -216,9 +221,12 @@ std::filesystem::path writeSvgPlot(const std::vector<SimulationRow>& rows) {
     constexpr double top = 56.0;
     constexpr double plotWidth = 700.0;
     constexpr double plotHeight = 390.0;
-    const auto finalStep = static_cast<double>(rows.size());
-    const auto xCoordinate = [=](std::size_t step) {
-        return left + static_cast<double>(step) / finalStep * plotWidth;
+    const auto xCoordinate = [=](std::size_t index) {
+        if (rows.size() == 1) {
+            return left + plotWidth / 2.0;
+        }
+        return left + static_cast<double>(index) /
+                          static_cast<double>(rows.size() - 1) * plotWidth;
     };
     const auto yCoordinate = [=](double value) {
         return top + (maximum - value) / (maximum - minimum) * plotHeight;
@@ -236,7 +244,7 @@ std::filesystem::path writeSvgPlot(const std::vector<SimulationRow>& rows) {
     svg << std::fixed << std::setprecision(2);
     svg << "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"860\" height=\"520\" viewBox=\"0 0 860 520\">\n";
     svg << "<rect width=\"100%\" height=\"100%\" fill=\"white\"/>\n";
-    svg << "<text x=\"430\" y=\"28\" text-anchor=\"middle\" font-family=\"sans-serif\" font-size=\"20\">Simulation output y(tau)</text>\n";
+    svg << "<text x=\"430\" y=\"28\" text-anchor=\"middle\" font-family=\"sans-serif\" font-size=\"20\">Output after each step</text>\n";
 
     for (int tick = 0; tick <= 4; ++tick) {
         const double ratio = static_cast<double>(tick) / 4.0;
@@ -253,7 +261,7 @@ std::filesystem::path writeSvgPlot(const std::vector<SimulationRow>& rows) {
         << "\" y2=\"" << top + plotHeight << "\" stroke=\"#263238\"/>\n";
     svg << "<line x1=\"" << left << "\" y1=\"" << top + plotHeight << "\" x2=\""
         << left + plotWidth << "\" y2=\"" << top + plotHeight << "\" stroke=\"#263238\"/>\n";
-    svg << "<text x=\"426\" y=\"500\" text-anchor=\"middle\" font-family=\"sans-serif\" font-size=\"14\">Step tau</text>\n";
+    svg << "<text x=\"426\" y=\"500\" text-anchor=\"middle\" font-family=\"sans-serif\" font-size=\"14\">Step</text>\n";
     svg << "<text x=\"20\" y=\"250\" transform=\"rotate(-90 20 250)\" text-anchor=\"middle\" font-family=\"sans-serif\" font-size=\"14\">Output y</text>\n";
 
     std::ostringstream points;
@@ -266,11 +274,12 @@ std::filesystem::path writeSvgPlot(const std::vector<SimulationRow>& rows) {
     for (std::size_t step = 0; step < outputs.size(); ++step) {
         svg << "<circle cx=\"" << xCoordinate(step) << "\" cy=\""
             << yCoordinate(outputs[step]) << "\" r=\"4\" fill=\"#1769aa\"/>\n";
-        if (step % std::max<std::size_t>(1, rows.size() / 4) == 0 || step == rows.size()) {
+        if (step % std::max<std::size_t>(1, (rows.size() - 1) / 4) == 0 ||
+            step + 1 == rows.size()) {
             svg << "<text x=\"" << xCoordinate(step) << "\" y=\""
                 << top + plotHeight + 20.0
                 << R"(" text-anchor="middle" font-family="sans-serif" font-size="12">)"
-                << step << "</text>\n";
+                << step + 1 << "</text>\n";
         }
     }
     svg << "</svg>\n";
@@ -279,6 +288,18 @@ std::filesystem::path writeSvgPlot(const std::vector<SimulationRow>& rows) {
     }
     return outputPath;
 }
+
+bool openSvgPlot(const std::filesystem::path& plotPath) {
+#ifdef _WIN32
+    const HINSTANCE result = ShellExecuteW(
+        nullptr, L"open", plotPath.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
+    return reinterpret_cast<INT_PTR>(result) > 32;
+#else
+    (void)plotPath;
+    return false;
+#endif
+}
+
 long long readInteger(const std::string& prompt) {
     long long value{};
     while (true) {
@@ -367,7 +388,7 @@ int main() {
 
         std::cout << "\nInput signals:\n"
                   << "1 - Constant input\n"
-                  << "2 - Impulse input (u[0]=1, then 0)\n"
+                  << "2 - Impulse input (1 at step 1, then 0)\n"
                   << "3 - Harmonic input (sin(tau))\n";
         const long long signalChoice = readChoice("Choose an input signal (1-3): ", 1, 3);
 
@@ -406,6 +427,10 @@ int main() {
         printTable(rows);
         const std::filesystem::path plotPath = writeSvgPlot(rows);
         std::cout << "\nSVG plot saved to: " << plotPath.string() << '\n';
+        if (!openSvgPlot(plotPath)) {
+            std::cerr << "Could not open the SVG plot automatically. "
+                         "Open the saved file manually.\n";
+        }
     } catch (const std::exception& error) {
         std::cerr << "Error: " << error.what() << '\n';
         return 1;

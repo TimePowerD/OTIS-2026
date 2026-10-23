@@ -11,3 +11,7 @@ add_executable(ii03008_task_01
 
 configure_file(plot_config.h.in "${CMAKE_CURRENT_BINARY_DIR}/plot_config.h" @ONLY)
 target_include_directories(ii03008_task_01 PRIVATE "${CMAKE_CURRENT_BINARY_DIR}")
+
+if(WIN32)
+    target_link_libraries(ii03008_task_01 PRIVATE shell32)
+endif()
