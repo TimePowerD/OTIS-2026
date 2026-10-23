@@ -221,14 +221,14 @@ std::filesystem::path writeSvgPlot(const std::vector<SimulationRow>& rows) {
     constexpr double top = 56.0;
     constexpr double plotWidth = 700.0;
     constexpr double plotHeight = 390.0;
-    const auto xCoordinate = [=](std::size_t index) {
+    const auto xCoordinate = [&](std::size_t index) {
         if (rows.size() == 1) {
             return left + plotWidth / 2.0;
         }
         return left + static_cast<double>(index) /
                           static_cast<double>(rows.size() - 1) * plotWidth;
     };
-    const auto yCoordinate = [=](double value) {
+    const auto yCoordinate = [&](double value) {
         return top + (maximum - value) / (maximum - minimum) * plotHeight;
     };
 
