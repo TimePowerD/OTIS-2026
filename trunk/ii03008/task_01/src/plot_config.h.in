@@ -1,2 +1,0 @@
-#pragma once
-#define II03008_PLOT_DIRECTORY R"(@CMAKE_BINARY_DIR@)"

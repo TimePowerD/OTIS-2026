@@ -2,7 +2,7 @@
 setlocal
 
 set "SRC_DIR=%~dp0."
-set "BUILD_DIR=%~dp0..\..\..\..\..\build-ii03008-task01"
+set "BUILD_DIR=%~dp0..\..\..\..\..\build-ii03010-task01"
 
 cmake -S "%SRC_DIR%" -B "%BUILD_DIR%"
 if errorlevel 1 exit /b 1

@@ -234,8 +234,8 @@ std::filesystem::path writeSvgPlot(const std::vector<SimulationRow>& rows) {
 
     const auto timestamp = std::chrono::steady_clock::now().time_since_epoch().count();
     const auto outputPath =
-        std::filesystem::path(II03008_PLOT_DIRECTORY) /
-        ("ii03008_task01_plot_" + std::to_string(timestamp) + ".svg");
+        std::filesystem::path(II03010_PLOT_DIRECTORY) /
+        ("ii03010_task01_plot_" + std::to_string(timestamp) + ".svg");
     std::ofstream svg(outputPath);
     if (!svg) {
         throw PlotWriteError("Could not create the SVG plot in the build directory.");
@@ -377,7 +377,7 @@ double readPositiveDouble(const std::string& prompt) {
 int main() {
     try {
         std::cout << "OTIS - Laboratory Work 1\n";
-        std::cout << "Student: ii03008\n";
+        std::cout << "Student: ii03010\n";
         std::cout << "Variant: 21\n\n";
 
         std::cout << "Models:\n"
